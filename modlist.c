@@ -26,14 +26,27 @@ struct list_item {  // Estructura representativa de los nodos de la lista
 
 // Funciones de lectura y escritura del modulo TODO
 
+
+static void list_cleanup(void) {
+    struct list_head* cur_node = NULL;
+    struct list_head* next = NULL;
+    if (!list_empty(&mylist)) {
+        trace_printk("Cleaning modlist\n");
+        list_for_each_safe(cur_node, next, &mylist) {
+            kfree(cur_node);
+        }
+    }else{
+        trace_printk("List is currently empty!\n");
+    }
+}
+
 static ssize_t modlist_read(struct file *filp, char __user *buf, size_t len, loff_t *off) { //REVISAR, se ve con trace que recorre la lista pero no imprime datos
-  
     int nr_bytes;
     char *out;
     struct list_item* item = NULL;
     struct list_head* cur_node = NULL;
     int i = 0;
-    
+    trace_printk("Reading modlist\n");
     if ((*off) > 0)  // No hay nada mas pendiente de leer
         return 0;
       
@@ -100,7 +113,8 @@ static ssize_t modlist_write(struct file *filp, const char __user *buf, size_t l
         trace_printk("Accessing remove to linked list\n");
     }else if(strcmp(action, "cleanup") == 0){
         trace_printk("Accessing cleanup linked list\n");
-        //list_cleanup(&mylist);
+        list_cleanup();
+        INIT_LIST_HEAD(&mylist);
     }else{
         trace_printk("Bad action requested\n");
         vfree(action);
@@ -112,18 +126,6 @@ static ssize_t modlist_write(struct file *filp, const char __user *buf, size_t l
     vfree(action);
     return len;
 }
-
-/*
-static void list_cleanup(struct list_head* list) {
-    if (!list_empty(list)) {
-        struct list_head* current = NULL;
-        struct list_head* next = NULL;
-        list_for_each_safe(current, next, list) {
-            kfree(current);
-        }
-    }
-}
-*/
 
 // Gestion del fichero /proc
 static struct proc_dir_entry *proc_entry;
@@ -155,15 +157,14 @@ int init_modlist_module(void) {
 void exit_modlist_module(void){//Cuelga el sistema cuando hay mas de 4 nodos en la lista (Con aprox. 10 el VMWare te dice que ha explotado la MV)
     remove_proc_entry("modlist", NULL);
     vfree(command);  // TEMP
-    // list_cleanup(&mylist);
-    if (!list_empty(&mylist)) {
+    list_cleanup();
+    /*if (!list_empty(&mylist)) {
         struct list_head* cur_node = NULL;
         struct list_head* next = NULL;
         list_for_each_safe(cur_node, next, &mylist) {
-            trace_printk("Liberating memory of a node\n");
             kfree(cur_node);
         }
-    }
+    }*/
     printk(KERN_INFO "Modlist: Module unloaded.\n");
 }
 
