@@ -67,29 +67,27 @@ static ssize_t modlist_read(struct file *filp, char __user *buf, size_t len, lof
     struct list_head* cur_node = NULL;
     int i = 0;
     trace_printk("Reading modlist\n");
-    if ((*off) > 0)  // No hay nada mas pendiente de leer
+
+    if ((*off) > 0) {  // No hay nada mas pendiente de leer
         return 0;
+    }
       
     nr_bytes = nr_items * (sizeof(int) + 1);  // +1 por el '\n'
     out = (char *)kmalloc(nr_bytes + 1, GFP_KERNEL);
-      
-    if (len < nr_bytes)
+
+    if (len < nr_bytes) {
+        kfree(out);
         return -ENOSPC;
+    }
     
 
+    char* ptr = out;
     list_for_each(cur_node, &mylist) {
-        /*
-            Tener un puntero de lectura del bufer (cuidado cuando se cargan demasiadas cosas, hay que controlar el buffer)
-            char *wrptr = *kbuf;
-            wprt += sprintf(*wrprt, "%d\n", item->data)
-        */
         item = list_entry(cur_node, struct list_item, links);
         trace_printk("Iteration of list_for_each with value %d\n", item->data);
-        // replace with strcat?
-        out[i] = item -> data;
-        i += sizeof(int);
-        out[i++] = '\n';
+        ptr += sprintf(out, "%d\n", item->data);
     }
+    // ptr += sprintf(out, "\0");
 
     // Transfiere informacion del kernel al espacio de usuario
     if (copy_to_user(buf, out, nr_bytes)) {
