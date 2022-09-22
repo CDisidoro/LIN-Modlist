@@ -30,10 +30,30 @@ struct list_item {  // Estructura representativa de los nodos de la lista
 static void list_cleanup(void) {
     struct list_head* cur_node = NULL;
     struct list_head* next = NULL;
+    struct list_item* item = NULL;
     if (!list_empty(&mylist)) {
         trace_printk("Cleaning modlist\n");
         list_for_each_safe(cur_node, next, &mylist) {
-            kfree(cur_node);
+            item = list_entry(cur_node, struct list_item, links);
+            kfree(item);
+        }
+    }else{
+        trace_printk("List is currently empty!\n");
+    }
+}
+
+static void remove_item(int val){
+    struct list_head* cur_node = NULL;
+    struct list_head* next = NULL;
+    struct list_item* item = NULL;
+    if (!list_empty(&mylist)) {
+        trace_printk("Removing %i from modlist\n", val);
+        list_for_each_safe(cur_node, next, &mylist) {
+            item = list_entry(cur_node, struct list_item, links);
+            if(item->data == val){
+                list_del(cur_node);
+                kfree(item);
+            }
         }
     }else{
         trace_printk("List is currently empty!\n");
@@ -58,6 +78,11 @@ static ssize_t modlist_read(struct file *filp, char __user *buf, size_t len, lof
     
 
     list_for_each(cur_node, &mylist) {
+        /*
+            Tener un puntero de lectura del bufer (cuidado cuando se cargan demasiadas cosas, hay que controlar el buffer)
+            char *wrptr = *kbuf;
+            wprt += sprintf(*wrprt, "%d\n", item->data)
+        */
         item = list_entry(cur_node, struct list_item, links);
         trace_printk("Iteration of list_for_each with value %d\n", item->data);
         // replace with strcat?
@@ -78,52 +103,39 @@ static ssize_t modlist_read(struct file *filp, char __user *buf, size_t len, lof
 }
 
 static ssize_t modlist_write(struct file *filp, const char __user *buf, size_t len, loff_t *off) {
-    int available_space = BUFFER_LENGTH - 1;
     int val; //Valor numerico que se va a agregar a la lista
-    char *action = (char *)vmalloc(BUFFER_LENGTH); //Segmento donde se guarda la accion a realizar
     struct list_item *item;
     if ((*off) > 0) {  // La aplicacion puede escribir en esta entrada solo una vez
         return 0;
-    }
-    if (len > available_space) {
-        printk(KERN_INFO "Modlist: not enough space!!\n");
-        return -ENOSPC;
     }
     // Transifere datos desde espacio usuario a espacio kernel
     if (copy_from_user(&command[0], buf, len)) {
         return -EFAULT;
     }
-    sscanf(command, "%s %d", &action[0], &val);  // Recoge los parametros que se le ha enviado al modulo
-    if(strlen(action) > 7){//Excede el limite de action
-        printk(KERN_INFO "Modlist: Bad action request!!\n");
-        vfree(action);
-        return -EOVERFLOW;
-    }
+    command[len] = '\0';
     trace_printk("New value of command: %s\n", command);
-    trace_printk("Action tracked: %s\n", action);
-    trace_printk("Value tracked, %d\n", val);
 
     //Se comprueba que accion se ha solicitado
-    if(strcmp(action, "add") == 0){
+    if(sscanf(command, "add %i", &val) == 1){
         trace_printk("Accessing add to linked list\n");
+        trace_printk("Value tracked, %d\n", val);
         item = (struct list_item*)kmalloc(sizeof(struct list_item), GFP_KERNEL);
         item->data = val;
         list_add_tail(&item->links,&mylist);
-    }else if(strcmp(action, "remove") == 0){
+    }else if(sscanf(command, "remove %i", &val) == 1){
         trace_printk("Accessing remove to linked list\n");
-    }else if(strcmp(action, "cleanup") == 0){
+        trace_printk("Value tracked, %d\n", val);
+        remove_item(val);
+    }else if(strcmp(command, "cleanup\n") == 0){
         trace_printk("Accessing cleanup linked list\n");
         list_cleanup();
         INIT_LIST_HEAD(&mylist);
     }else{
         trace_printk("Bad action requested\n");
-        vfree(action);
-        return -EBADMSG;
+        return -EINVAL;
     }
-    
-    command[len] = '\0';  // Agrega el `\0'
+
     *off += len;  // actualiza el puntero de fichero
-    vfree(action);
     return len;
 }
 
