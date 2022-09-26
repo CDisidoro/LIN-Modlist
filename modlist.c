@@ -60,12 +60,12 @@ static void remove_item(int val){
     }
 }
 
-static ssize_t modlist_read(struct file *filp, char __user *buf, size_t len, loff_t *off) { //REVISAR, se ve con trace que recorre la lista pero no imprime datos
+static ssize_t modlist_read(struct file *filp, char __user *buf, size_t len, loff_t *off) { //TODO
     int nr_bytes;
-    char *out;
+    char *out = kbuf;
     struct list_item* item = NULL;
     struct list_head* cur_node = NULL;
-    int i = 0;
+    //char* ptr;
     trace_printk("Reading modlist\n");
 
     if ((*off) > 0) {  // No hay nada mas pendiente de leer
@@ -73,19 +73,17 @@ static ssize_t modlist_read(struct file *filp, char __user *buf, size_t len, lof
     }
       
     nr_bytes = nr_items * (sizeof(int) + 1);  // +1 por el '\n'
-    out = (char *)kmalloc(nr_bytes + 1, GFP_KERNEL);
+    //out = (char *)kmalloc(nr_bytes + 1, GFP_KERNEL);
 
     if (len < nr_bytes) {
         kfree(out);
         return -ENOSPC;
     }
-    
 
-    char* ptr = out;
     list_for_each(cur_node, &mylist) {
         item = list_entry(cur_node, struct list_item, links);
         trace_printk("Iteration of list_for_each with value %d\n", item->data);
-        ptr += sprintf(out, "%d\n", item->data);
+        out += sprintf(out, "%d\n", item->data);
     }
     // ptr += sprintf(out, "\0");
 
