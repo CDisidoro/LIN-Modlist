@@ -61,7 +61,7 @@ static void remove_item(int val){
 }
 
 static ssize_t modlist_read(struct file *filp, char __user *buf, size_t len, loff_t *off) { //TODO
-    int nr_bytes;
+    int nr_bytes = 0;
     char *out = kbuf;
     struct list_item* item = NULL;
     struct list_head* cur_node = NULL;
@@ -72,28 +72,29 @@ static ssize_t modlist_read(struct file *filp, char __user *buf, size_t len, lof
         return 0;
     }
       
-    nr_bytes = nr_items * (sizeof(int) + 1);  // +1 por el '\n'
+    /*nr_bytes = nr_items * (sizeof(int) + 1);  // +1 por el '\n'
     //out = (char *)kmalloc(nr_bytes + 1, GFP_KERNEL);
 
     if (len < nr_bytes) {
         kfree(out);
         return -ENOSPC;
-    }
+    }*/
 
     list_for_each(cur_node, &mylist) {
         item = list_entry(cur_node, struct list_item, links);
         trace_printk("Iteration of list_for_each with value %d\n", item->data);
         out += sprintf(out, "%d\n", item->data);
+        nr_bytes += sizeof(int) + 1;
     }
-    // ptr += sprintf(out, "\0");
+    //out += sprintf(out, "\0");
 
     // Transfiere informacion del kernel al espacio de usuario
     if (copy_to_user(buf, out, nr_bytes)) {
-        kfree(out);
+        //kfree(out);
         return -EINVAL;
     }
     
-    kfree(out);
+    //kfree(out);
     (*off) += len;  // Actualiza el puntero de fichero
     return nr_bytes; 
 }
