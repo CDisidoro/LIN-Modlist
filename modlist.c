@@ -11,21 +11,20 @@
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Gestion de lista enlazada de enteros");
-MODULE_AUTHOR("Camilo Andres Disidoro - David Manuel Perez Mora");
+MODULE_AUTHOR("Camilo Andres Disidoro");
 
 
-static char *command;  // Espacio reservado para el comando
+static char *kbuf;  // Espacio reservado para el comando
 
 // Declaracion de la estructura base
 struct list_head mylist;  // Cabecera de la lista enlazada
-int nr_items;
 struct list_item {  // Estructura representativa de los nodos de la lista
     int data;
     struct list_head links;
 };
 
-// Funciones de lectura y escritura del modulo TODO
 
+// Funciones de eliminacion de datos y limpieza de la lista
 
 static void list_cleanup(void) {
     struct list_head* cur_node = NULL;
@@ -60,41 +59,34 @@ static void remove_item(int val){
     }
 }
 
-static ssize_t modlist_read(struct file *filp, char __user *buf, size_t len, loff_t *off) { //TODO
-    int nr_bytes = 0;
+// Funciones de lectura y escritura del modulo
+
+static ssize_t modlist_read(struct file *filp, char __user *buf, size_t len, loff_t *off) {
+
+    int nr_bytes = 0, offset;
     char *out = kbuf;
     struct list_item* item = NULL;
     struct list_head* cur_node = NULL;
-    //char* ptr;
+
     trace_printk("Reading modlist\n");
 
-    if ((*off) > 0) {  // No hay nada mas pendiente de leer
+    if ((*off) > 0) {// No hay nada mas pendiente de leer
         return 0;
     }
-      
-    /*nr_bytes = nr_items * (sizeof(int) + 1);  // +1 por el '\n'
-    //out = (char *)kmalloc(nr_bytes + 1, GFP_KERNEL);
-
-    if (len < nr_bytes) {
-        kfree(out);
-        return -ENOSPC;
-    }*/
 
     list_for_each(cur_node, &mylist) {
         item = list_entry(cur_node, struct list_item, links);
         trace_printk("Iteration of list_for_each with value %d\n", item->data);
-        out += sprintf(out, "%d\n", item->data);
-        nr_bytes += sizeof(int) + 1;
+        offset = sprintf(out, "%d\n", item->data);
+        nr_bytes += offset;
+        out += offset;
     }
-    //out += sprintf(out, "\0");
 
     // Transfiere informacion del kernel al espacio de usuario
-    if (copy_to_user(buf, out, nr_bytes)) {
-        //kfree(out);
+    if (copy_to_user(buf, kbuf, nr_bytes)) {
         return -EINVAL;
     }
     
-    //kfree(out);
     (*off) += len;  // Actualiza el puntero de fichero
     return nr_bytes; 
 }
@@ -106,24 +98,24 @@ static ssize_t modlist_write(struct file *filp, const char __user *buf, size_t l
         return 0;
     }
     // Transifere datos desde espacio usuario a espacio kernel
-    if (copy_from_user(&command[0], buf, len)) {
+    if (copy_from_user(&kbuf[0], buf, len)) {
         return -EFAULT;
     }
-    command[len] = '\0';
-    trace_printk("New value of command: %s\n", command);
+    kbuf[len] = '\0';
+    trace_printk("New value of kbuf: %s\n", kbuf);
 
     //Se comprueba que accion se ha solicitado
-    if(sscanf(command, "add %i", &val) == 1){
+    if(sscanf(kbuf, "add %i", &val) == 1){
         trace_printk("Accessing add to linked list\n");
         trace_printk("Value tracked, %d\n", val);
         item = (struct list_item*)kmalloc(sizeof(struct list_item), GFP_KERNEL);
         item->data = val;
         list_add_tail(&item->links,&mylist);
-    }else if(sscanf(command, "remove %i", &val) == 1){
+    }else if(sscanf(kbuf, "remove %i", &val) == 1){
         trace_printk("Accessing remove to linked list\n");
         trace_printk("Value tracked, %d\n", val);
         remove_item(val);
-    }else if(strcmp(command, "cleanup\n") == 0){
+    }else if(strcmp(kbuf, "cleanup\n") == 0){
         trace_printk("Accessing cleanup linked list\n");
         list_cleanup();
         INIT_LIST_HEAD(&mylist);
@@ -148,8 +140,8 @@ static const struct proc_ops proc_entry_fops = {
 int init_modlist_module(void) {
     int ret = 0;
     INIT_LIST_HEAD(&mylist);
-    command = (char *)vmalloc(BUFFER_LENGTH);  // TEMP
-    if (!command) {
+    kbuf = (char *)vmalloc(BUFFER_LENGTH);
+    if (!kbuf) {
         return -ENOMEM;
     } else {
         proc_entry = proc_create( "modlist", 0666, NULL, &proc_entry_fops);
@@ -163,17 +155,10 @@ int init_modlist_module(void) {
     return ret;
 }
 
-void exit_modlist_module(void){//Cuelga el sistema cuando hay mas de 4 nodos en la lista (Con aprox. 10 el VMWare te dice que ha explotado la MV)
+void exit_modlist_module(void){
     remove_proc_entry("modlist", NULL);
-    vfree(command);  // TEMP
+    vfree(kbuf);
     list_cleanup();
-    /*if (!list_empty(&mylist)) {
-        struct list_head* cur_node = NULL;
-        struct list_head* next = NULL;
-        list_for_each_safe(cur_node, next, &mylist) {
-            kfree(cur_node);
-        }
-    }*/
     printk(KERN_INFO "Modlist: Module unloaded.\n");
 }
 
